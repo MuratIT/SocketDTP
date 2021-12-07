@@ -1,7 +1,7 @@
 import json
 import base64
 import hashlib
-from DTP import DTP
+from SocketDTP import DTP
 from Crypto import Random
 from Crypto.Cipher import AES
 from Crypto.Util import number
