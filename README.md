@@ -53,7 +53,7 @@
 	async def Accept():
 	    while True:
 	        client, address = await loop.sock_accept(server)
-	        message_key, mac_key = sdtp.enc_key_server(client, 2)
+	        message_key, mac_key = sdtp.enc_key_server(client, 2) # Encryption key exchange
 	        ob_user = {
 	            f'connect_{address[0]}:{address[1]}': {
 	                'socket': client,
@@ -89,7 +89,7 @@
 	client.connect(('localhost', 1234))
 
 	sdtp = SDTP()
-	message_key, mac_key = sdtp.enc_key_client(client, 2)
+	message_key, mac_key = sdtp.enc_key_client(client, 2) # Encryption key exchange
 
 
 	async def recvMessage():
