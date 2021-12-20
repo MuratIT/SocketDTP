@@ -1,7 +1,8 @@
 import json
 import base64
 import hashlib
-from SocketDTP import DTP
+import logging
+from DTP import DTP
 from Crypto import Random
 from Crypto.Cipher import AES
 from Crypto.Util import number
@@ -10,6 +11,9 @@ from Crypto.Random.random import getrandbits
 
 class SDTP(DTP):
     def __init__(self, pg: tuple = (0, 0), n: int = 1024):
+        super().__init__()
+
+        self.log = logging.getLogger('SDTP')
         self.pg = pg
         self.n = n
 
@@ -80,7 +84,7 @@ class SDTP(DTP):
             if recv['type'] == 'enc_key':
                 key = self.__DH.SharedSecretKey(recv['data']['publicKey'], private_key, self.pg)
                 arr.add(key)
-
+        self.log.debug(str(arr))
         return arr
 
     def enc_key_client(self, socket, count: int):
@@ -96,7 +100,7 @@ class SDTP(DTP):
                 pub_key = self.__DH.PublicKey(recv['data']['pg'], private_key)
                 message = self.message('enc_key', {'publicKey': pub_key})
                 self.send(socket, message)
-
+        self.log.debug(str(arr))
         return arr
 
     def __encSend(self, key, mac_key, message):
@@ -121,7 +125,9 @@ class SDTP(DTP):
                 data.pop('mac')
                 recv['data'] = data
             else:
-                return self.message('error', 'mac is not good')
+                error = self.message('error', 'mac is not good')
+                self.log.error(error)
+                return error
             return recv
 
     def encRecv(self, socket, key, mac_key):
