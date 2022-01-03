@@ -3,113 +3,123 @@
 
 ## Server 
 ```python
-	import socket
-	import asyncio
-	import logging
-	from SocketDTP.SDTP import SDTP
-
-	logging.basicConfig(level=logging.INFO)
-
-	log = logging.getLogger('Server')
-
-	loop = asyncio.get_event_loop()
-
-	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	server.bind(('localhost', 1234))
-	server.listen()
-
-	sdtp = SDTP()
-
-	users = list()
+import socket
+import logging
+import asyncio
+from SocketDTP.SDTP import SDTP
 
 
-	def closeClient(client):
-	    for user in users:
-	        for key, value in user.items():
-	            if client == value['socket']:
-	                users.remove(user)
-	                client.close()
+class Server(SDTP):
+    def __init__(self):
+        logging.basicConfig(level=logging.DEBUG)
+        self.logServer = logging.getLogger('Server')
+
+        self.loop = asyncio.get_event_loop()
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind(('localhost', 2324))
+        self.socket.listen()
+
+        super(Server, self).__init__()
+        self.GenPG()
+
+    def clientClose(self, client, client_address: tuple, error: str = 'No'):
+        self.logServer.info(f'Client close: {client_address}, Error: {error}')
+        client.close()
+
+    async def recvToSend(self, client, client_address: tuple, message_key: str, mac_key: str):
+        while True:
+            try:
+                recv = await self.encRecvAsync(self.loop, client, message_key, mac_key)
+                if recv:
+                    if recv['type'] == 'message':
+                        await self.encSendAsync(self.loop, client, message_key, mac_key, recv['data']['message'])
+                else:
+                    self.clientClose(client, client_address)
+                    break
+            except Exception as e:
+                self.clientClose(client, client_address, e.args[1])
+                client.close()
+                break
+
+    async def accept(self):
+        while True:
+            client, client_address = await self.loop.sock_accept(self.socket)
+            self.logServer.info(f'Client connect: {client_address}')
+
+            message_key, mac_key = self.enc_key(client, 2)
+            message_key, mac_key = str(message_key), str(mac_key)
+            self.logServer.info(f'Connections are protected')
+
+            self.loop.create_task(self.recvToSend(client, client_address, message_key, mac_key))
+
+    async def main(self):
+        self.logServer.info('Start Server')
+        await self.loop.create_task(self.accept())
+
+    def run(self):
+        try:
+            self.loop.run_until_complete(self.main())
+        except KeyboardInterrupt:
+            self.logServer.info('Close Server')
 
 
-	async def sendsMessage(client, message):
-	    for user in users:
-	        for key, value in user.items():
-	            if client != value['socket']:
-	                await sdtp.encSendAsync(loop, value['socket'], str(value['message_key']), str(value['mac_key']), message)
-
-
-	async def recvToSend(client, address, message_key, mac_key):
-	    while True:
-	        try:
-	            recv = await sdtp.encRecvAsync(loop, client, str(message_key), str(mac_key))
-	            if recv['type'] == 'message':
-	                await sendsMessage(client, recv['data']['message'])
-	        except Exception as e:
-	            log.error(e)
-	            closeClient(client)
-	            break
-
-
-	async def Accept():
-	    while True:
-	        client, address = await loop.sock_accept(server)
-	        message_key, mac_key = sdtp.enc_key_server(client, 2) # Encryption key exchange
-	        ob_user = {
-	            f'connect_{address[0]}:{address[1]}': {
-	                'socket': client,
-	                'message_key': message_key,
-	                'mac_key': mac_key
-	            }
-	        }
-	        users.append(ob_user)
-	        loop.create_task(recvToSend(client, address, message_key, mac_key))
-
-
-	async def main():
-	    await loop.create_task(Accept())
-
-
-	if __name__ == "__main__":
-	    sdtp.GenPG()
-	    loop.run_until_complete(main())
-
+if __name__ == "__main__":
+    server = Server()
+    server.run()
 ```
 
 
 ## Client
 ```python
-	import socket
-	import asyncio
-	from SocketDTP.SDTP import SDTP
+import socket
+import logging
+import asyncio
+from SocketDTP.SDTP import SDTP
 
 
-	loop = asyncio.get_event_loop()
+class Client(SDTP):
+    def __init__(self):
+        logging.basicConfig(level=logging.INFO)
+        self.logClient = logging.getLogger('Client')
 
-	client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	client.connect(('localhost', 1234))
+        self.loop = asyncio.get_event_loop()
 
-	sdtp = SDTP()
-	message_key, mac_key = sdtp.enc_key_client(client, 2) # Encryption key exchange
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect(('localhost', 2324))
+
+        super(Client, self).__init__()
+
+        message_key, mac_key = self.enc_key(self.socket, 2, 'client')
+        self.message_key, self.mac_key = str(message_key), str(mac_key)
+
+    async def recvMessage(self):
+        while True:
+            recv = await self.encRecvAsync(self.loop, self.socket, self.message_key, self.mac_key)
+            if recv:
+                if recv['type'] == 'message':
+                    print(f"Recv server: {recv['data']['message']}")
+            else:
+                self.socket.close()
+                break
+
+    async def handler(self):
+        self.loop.create_task(self.recvMessage())
+        while True:
+            message = await self.loop.run_in_executor(None, input)
+            await self.encSendAsync(self.loop, self.socket, self.message_key, self.mac_key, message)
+
+    async def main(self):
+        await self.loop.create_task(self.handler())
+
+    def run(self):
+        try:
+            self.loop.run_until_complete(self.main())
+        except KeyboardInterrupt:
+            self.logClient.info('Close Server')
 
 
-	async def recvMessage():
-	    while True:
-	        recv = await sdtp.encRecvAsync(loop, client, str(message_key), str(mac_key))
-	        print(recv)
-
-
-	async def sendsMessage():
-	    loop.create_task(recvMessage())
-	    while True:
-	        message = await loop.run_in_executor(None, input)
-	        await sdtp.encSendAsync(loop, client, str(message_key), str(mac_key), message)
-
-
-	async def main():
-	    await loop.create_task(sendsMessage())
-
-
-	if __name__ == "__main__":
-	    loop.run_until_complete(main())
-
+if __name__ == "__main__":
+    client = Client()
+    client.run()
 ```

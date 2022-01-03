@@ -58,7 +58,7 @@ class DTP:
                     self.log.debug(packet)
                     return packet
                 data += packet
-            self.log.debug(data.decode())
+            self.log.debug(data)
             return data
 
         async def send(self, socket: any, message: str):
@@ -76,6 +76,6 @@ class DTP:
                 self.log.debug(raw_msglen)
                 return raw_msglen
             msglen = struct.unpack('>I', raw_msglen)[0]
-            recv_all = self.__recv_all(sock, msglen)
+            recv_all = await self.__recv_all(sock, msglen)
             self.log.debug(recv_all)
-            return await recv_all
+            return recv_all
